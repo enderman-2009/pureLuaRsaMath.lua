@@ -1,6 +1,11 @@
+--os.execute("wget -q https://raw.githubusercontent.com/edubart/lua-bint/master/bint.lua")
+--remove line 57 if you don't have a data card installed keep it otherwise
+
+local bint = require("bint")(65536)
+local comp = require("component")
+
 local rsa = {}
-local extended_gcd, gcd, decompose, isComposite, isPrime, randomPrime
-extended_gcd = function(a, b)
+local function extended_gcd(a, b)
 	if b == 0 then
 		return a, 1, 0
 	else
@@ -9,49 +14,60 @@ extended_gcd = function(a, b)
 		return d, x, y
 	end
 end
-gcd = function(a, b)
+local function gcd(a, b)
 	if b == 0 then
 		return a
 	else
 		return gcd(b, a % b)
 	end
 end
-decompose = function(n)
-	local i = 0
-	while n & (1 << i) == 0 do
-		i = i + 1
-		return i, n >> i
-	end
+
+local primes = {}
+
+local function isPrime(n)
+  local cached = primes[n]
+  if cached ~= nil then
+    return cached
+  end
+  for i = 2, math.sqrt(n) do
+    if n % i == 0 then
+      primes[n] = false
+      return false
+    end
+  end
+  primes[n] = true
+  return true 
 end
-isComposite = function(a, n)
-	t,d = decompose(n - 1)
-	x = a^d%n
-	if x == 1 or x == n - 1 then
-		return False
-	end
-	for i=1, t do
-		x0 = x
-		x = x0^2%n
-		if x == 1 and x0 ~= 1 and x0 ~= n - 1 then
-			return true
+
+local function primeFactorization(n)
+  local finale = {}
+  local newNumber = n
+  for i = 2, n do
+    if isPrime(i) then
+      while newNumber % i == 0 do 
+        finale[#finale + 1] = i
+        newNumber = newNumber / i
+      end
+    end
+  end
+  return table.concat(finale, ", ")
+end
+
+local function randomPrime(min, max)
+	math.randomseed(string.gsub(comp.data.random(32), ".", string.byte)) -- remove this if you don't have a data card installed
+	while true do
+		local num = math.random(min, max)
+		if isPrime(num) then
+			return num
 		end
 	end
-	if x ~= 1 then
-		return true
-	end
-	return false
 end
-isPrime = function(n)
-	if n%2 == 0 then
-		return false
-	end
-	for i=1, 40 do
-		a = math.random(n - 1)
-		if isComposite(a, n) then
-			return false
-		end
-	end
-	return true
+rsa.randomKeys = function(min, max)
+	min = min or 2^32
+	max = max or min * 1000
+	local p = randomPrime(math.ceil(math.sqrt(min)), math.ceil(math.sqrt(max)))
+	local q = randomPrime(math.ceil(math.sqrt(min)), math.ceil(math.sqrt(max)))
+	return rsa.generateKeys(p, q)
 end
 rsa.generateKeys = function(p, q)
 	local product = bint(p*q)
@@ -64,9 +80,9 @@ rsa.generateKeys = function(p, q)
 		end
 	end
 	local _, private, _ = extended_gcd(public, totient)
-	return product, public, private % totient, totient
+	return product, public, private % totient
 end
-rsa.encryption = function(data, key, modulo)
-	return data^key%modulo
+rsa.encryption = function(data, key, modulo) --modulo should be the product
+	return bint.upowmod(data, key, modulo)
 end
 return rsa
